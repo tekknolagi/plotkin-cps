@@ -31,7 +31,11 @@ def cps(exp, k):
                                    cps(iffalse, vk)]]),
                      ], k]
         case [func, arg]:
-            raise NotImplementedError("Not implemented")
+            vfunc = gensym()
+            varg = gensym()
+            return cps(func, ["cont", vfunc,
+                              cps(arg, ["cont", varg,
+                                        [vfunc, varg, k]])])
     raise NotImplementedError("Not implemented")
 
 
@@ -62,6 +66,12 @@ class CPSTest(unittest.TestCase):
         self.assertEqual(
             cps(["if", 1, 2, 3], "k"),
             [['cont', 'k1', [['cont', 'v0', ['$if', 'v0', ['k1', 2], ['k1', 3]]], 1]], 'k']
+        )
+
+    def test_call(self):
+        self.assertEqual(
+            cps(["f", 1], "k"),
+            [["cont", "v0", [["cont", "v1", ["v0", "v1", "k"]], 1]], "f"]
         )
 
 
