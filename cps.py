@@ -109,10 +109,22 @@ def unpack_cont(cont):
     raise NotImplementedError(cont)
 
 
+def apply_cont(cont, arg):
+    match cont:
+        case ["cont", [argname], body]:
+            interp(body, {argname: arg})
+            return
+        case FunctionType(_):
+            cont(arg)
+            return
+    raise NotImplementedError(cont)
+
+
 def interp(cps, env):
     match cps:
         case ["$+", x, y, k]:
-            triv(k, env)(triv(x, env) + triv(y, env))
+            varg = triv(x, env) + triv(y, env)
+            apply_cont(triv(k, env), varg)
             return
         case ["$-", x, y, k]:
             triv(k, env)(triv(x, env) - triv(y, env))
