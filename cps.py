@@ -104,6 +104,8 @@ def triv(cps, env):
             return cps
         case ["cont", [argname], body]:
             return cps
+        case FunctionType:
+            return cps
     raise NotImplementedError(cps)
 
 
@@ -223,6 +225,13 @@ class CPSInterpTests(unittest.TestCase):
         _set, _get = self._return()
         exp = [["cont", ["v0"], [["cont", ["v1"], ["v0", "v1", "k"]], 1]], "f"]
         interp(exp, {"f": lambda x, env, k: apply_cont(k, x+1, env), "k": _set})
+        self.assertEqual(_get(), 2)
+
+    def test_call_reentrant(self):
+        _set, _get = self._return()
+        exp = [["cont", ["v0"], [["cont", ["v1"], ["v0", "v1", "k"]], 1]], "f"]
+        interp(exp, {"f": lambda x, env, k: apply_cont(k, x+1, env),
+                     "k": ["cont", ["x"], [_set, "x"]]})
         self.assertEqual(_get(), 2)
 
 
