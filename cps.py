@@ -66,7 +66,7 @@ class CPSTest(unittest.TestCase):
     def test_if(self):
         self.assertEqual(
             cps(["if", 1, 2, 3], "k"),
-            [['cont', ['k1'], [['cont', ['v0'], ['$if', 'v0', ['k1', 2], ['k1', 3]]], 1]], 'k']
+            [["cont", ["k1"], [["cont", ["v0"], ["$if", "v0", ["k1", 2], ["k1", 3]]], 1]], "k"]
         )
 
     def test_call(self):
