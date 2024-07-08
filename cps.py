@@ -109,12 +109,12 @@ def unpack_cont(cont):
     raise NotImplementedError(cont)
 
 
-def apply_cont(cont, arg):
+def apply_cont(cont, arg, env):
     match cont:
         case ["cont", [argname], body]:
-            interp(body, {argname: arg})
+            interp(body, {**env, argname: arg})
             return
-        case FunctionType(_):
+        case FunctionType:
             cont(arg)
             return
     raise NotImplementedError(cont)
@@ -124,10 +124,11 @@ def interp(cps, env):
     match cps:
         case ["$+", x, y, k]:
             varg = triv(x, env) + triv(y, env)
-            apply_cont(triv(k, env), varg)
+            apply_cont(triv(k, env), varg, env)
             return
         case ["$-", x, y, k]:
-            triv(k, env)(triv(x, env) - triv(y, env))
+            varg = triv(x, env) - triv(y, env)
+            apply_cont(triv(k, env), varg, env)
             return
         case ["fun", [arg, k], body]:
             raise NotImplementedError(cps)
@@ -180,10 +181,20 @@ class CPSInterpTests(unittest.TestCase):
         interp(["$+", 1, 2, "k"], {"k": _set})
         self.assertEqual(_get(), 3)
 
+    def test_add_nested(self):
+        _set, _get = self._return()
+        interp(["$+", 1, 2, ["cont", ["v0"], ["$+", "v0", 3, "k"]]], {"k": _set})
+        self.assertEqual(_get(), 6)
+
     def test_sub(self):
         _set, _get = self._return()
         interp(["$-", 1, 2, "k"], {"k": _set})
         self.assertEqual(_get(), -1)
+
+    def test_sub_nested(self):
+        _set, _get = self._return()
+        interp(["$-", 1, 2, ["cont", ["v0"], ["$-", "v0", 3, "k"]]], {"k": _set})
+        self.assertEqual(_get(), -4)
 
     def test_lambda_id(self):
         _set, _get = self._return()
