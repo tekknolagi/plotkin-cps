@@ -57,6 +57,12 @@ class CPSTest(unittest.TestCase):
             [["cont", ["v0"], [["cont", ["v1"], ["$+", "v0", "v1", "k"]], 2]], 1],
         )
 
+    def test_sub(self):
+        self.assertEqual(
+            cps(["-", 1, 2], "k"),
+            [["cont", ["v0"], [["cont", ["v1"], ["$-", "v0", "v1", "k"]], 2]], 1],
+        )
+
     def test_lambda_id(self):
         self.assertEqual(
             cps(["lambda", "x", "x"], "k"),
@@ -108,6 +114,9 @@ def interp(cps, env):
         case ["$+", x, y, k]:
             triv(k, env)(triv(x, env) + triv(y, env))
             return
+        case ["$-", x, y, k]:
+            triv(k, env)(triv(x, env) - triv(y, env))
+            return
         case ["fun", [arg, k], body]:
             raise NotImplementedError(cps)
         case ["$if", cond, iftrue, iffalse]:
@@ -158,6 +167,11 @@ class CPSInterpTests(unittest.TestCase):
         _set, _get = self._return()
         interp(["$+", 1, 2, "k"], {"k": _set})
         self.assertEqual(_get(), 3)
+
+    def test_sub(self):
+        _set, _get = self._return()
+        interp(["$-", 1, 2, "k"], {"k": _set})
+        self.assertEqual(_get(), -1)
 
     def test_lambda_id(self):
         _set, _get = self._return()
