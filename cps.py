@@ -1,4 +1,5 @@
 import unittest
+from types import FunctionType
 
 
 GENSYM_COUNTER = iter(range(1000))
@@ -73,6 +74,111 @@ class CPSTest(unittest.TestCase):
             cps(["f", 1], "k"),
             [["cont", "v0", [["cont", "v1", ["v0", "v1", "k"]], 1]], "f"]
         )
+
+
+def triv(cps, env):
+    match cps:
+        case int(_):
+            return cps
+        case str(_):
+            return env[cps]
+        case ["fun", [argname, kname], body]:
+            return cps
+        case ["cont", argname, body]:
+            return cps
+    raise NotImplementedError(cps)
+
+
+def unpack_func(func):
+    match func:
+        case ["fun", [argname, kname], body]:
+            return argname, kname, body
+    raise NotImplementedError(func)
+
+
+def unpack_cont(cont):
+    match cont:
+        case ["cont", argname, body]:
+            return argname, body
+    raise NotImplementedError(cont)
+
+
+def interp(cps, env):
+    match cps:
+        case ["$+", x, y, k]:
+            triv(k, env)(triv(x, env) + triv(y, env))
+            return
+        case ["fun", [arg, k], body]:
+            raise NotImplementedError(cps)
+        case ["$if", cond, iftrue, iffalse]:
+            vcond = triv(cond, env)
+            if vcond:
+                interp(iftrue, env)
+            else:
+                interp(iffalse, env)
+            return
+        case [cont, arg]:
+            vcont = triv(cont, env)
+            varg = triv(arg, env)
+            if isinstance(vcont, FunctionType):
+                vcont(varg)
+                return
+            argname, body = unpack_cont(vcont)
+            interp(body, {**env, argname: varg})
+            return
+        case [func, arg, k]:
+            vfunc = triv(func, env)
+            varg = triv(arg, env)
+            if isinstance(vfunc, FunctionType):
+                vfunc(varg, triv(k, env))
+                return
+            argname, kname, body = unpack_func(vfunc)
+            interp(body, {**env, argname: varg, kname: k})
+            return
+    raise NotImplementedError(cps)
+
+
+class CPSInterpTests(unittest.TestCase):
+    @staticmethod
+    def _return():
+        result = None
+        def _set(x):
+            nonlocal result
+            result = x
+        def _get():
+            return result
+        return _set, _get
+
+    def test_ret(self):
+        _set, _get = self._return()
+        interp(["k", 1], {"k": _set})
+        self.assertEqual(_get(), 1)
+
+    def test_add(self):
+        _set, _get = self._return()
+        interp(["$+", 1, 2, "k"], {"k": _set})
+        self.assertEqual(_get(), 3)
+
+    def test_lambda_id(self):
+        _set, _get = self._return()
+        interp(["k", ["fun", ["x", "k0"], ["k0", "x"]]], {"k": _set})
+        self.assertEqual(_get(), ["fun", ["x", "k0"], ["k0", "x"]])
+
+    def test_if_true(self):
+        _set, _get = self._return()
+        interp(["$if", 1, ["k1", 2], ["k1", 3]], {"k1": _set})
+        self.assertEqual(_get(), 2)
+
+    def test_if_false(self):
+        _set, _get = self._return()
+        interp(["$if", 0, ["k1", 2], ["k1", 3]], {"k1": _set})
+        self.assertEqual(_get(), 3)
+
+    def test_call(self):
+        _set, _get = self._return()
+        exp = [["cont", "v0", [["cont", "v1", ["v0", "v1", "k"]], 1]], "f"]
+        interp(exp, {"f": lambda x, k: k(x + 1), "k": _set})
+        self.assertEqual(_get(), 2)
 
 
 if __name__ == "__main__":
