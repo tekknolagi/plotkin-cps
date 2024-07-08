@@ -94,6 +94,15 @@ class CPSTest(unittest.TestCase):
         )
 
 
+def is_small(cps):
+    match cps:
+        case int(_) | str(_):
+            return True
+        case FunctionType:
+            return True
+    return False
+
+
 def triv(cps, env):
     match cps:
         case int(_):
