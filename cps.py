@@ -127,7 +127,7 @@ def apply_cont(cont, arg, env):
             interp(body, {**env, argname: arg})
             return
         case FunctionType:
-            cont(arg)
+            cont(arg, env)
             return
     raise NotImplementedError(cont)
 
@@ -160,7 +160,7 @@ def interp(cps, env):
             vfunc = triv(func, env)
             varg = triv(arg, env)
             if isinstance(vfunc, FunctionType):
-                vfunc(varg, triv(k, env))
+                vfunc(varg, env, triv(k, env))
                 return
             argname, kname, body = unpack_func(vfunc)
             interp(body, {**env, argname: varg, kname: k})
@@ -172,7 +172,7 @@ class CPSInterpTests(unittest.TestCase):
     @staticmethod
     def _return():
         result = None
-        def _set(x):
+        def _set(x, _env):
             nonlocal result
             result = x
         def _get():
@@ -222,7 +222,7 @@ class CPSInterpTests(unittest.TestCase):
     def test_call(self):
         _set, _get = self._return()
         exp = [["cont", ["v0"], [["cont", ["v1"], ["v0", "v1", "k"]], 1]], "f"]
-        interp(exp, {"f": lambda x, k: k(x + 1), "k": _set})
+        interp(exp, {"f": lambda x, env, k: apply_cont(k, x+1, env), "k": _set})
         self.assertEqual(_get(), 2)
 
 
