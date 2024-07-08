@@ -57,6 +57,18 @@ class CPSTest(unittest.TestCase):
             [["cont", ["v0"], [["cont", ["v1"], ["$+", "v0", "v1", "k"]], 2]], 1],
         )
 
+    def test_add_nested(self):
+        self.assertEqual(
+            cps(["+", 1, ["+", 2, 3]], "k"),
+            [["cont", ["v0"],
+              [["cont", ["v2"],
+                [["cont", ["v3"],
+                  ["$+", "v2", "v3", ["cont", ["v1"], ["$+", "v0", "v1", "k"]]]],
+                 3]],
+               2]],
+             1]
+        )
+
     def test_sub(self):
         self.assertEqual(
             cps(["-", 1, 2], "k"),
@@ -142,11 +154,7 @@ def interp(cps, env):
         case [cont, arg]:
             vcont = triv(cont, env)
             varg = triv(arg, env)
-            if isinstance(vcont, FunctionType):
-                vcont(varg)
-                return
-            argname, body = unpack_cont(vcont)
-            interp(body, {**env, argname: varg})
+            apply_cont(vcont, varg, env)
             return
         case [func, arg, k]:
             vfunc = triv(func, env)
