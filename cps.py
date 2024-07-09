@@ -94,6 +94,115 @@ class CPSTest(unittest.TestCase):
         )
 
 
+def cps_pyfunc(exp, k):
+    match exp:
+        case int(_) | str(_) | ["lambda", _, _]:
+            return k(cps_trivial(exp))
+        case [op, x, y] if op in ["+", "-", "*", "/"]:
+            rv = gensym()
+            cont = ["cont", [rv], k(rv)]
+            return cps_pyfunc(x, lambda vx:
+                        cps_pyfunc(y, lambda vy:
+                            [f"${op}", vx, vy, cont]))
+        case [f, e]:
+            rv = gensym()
+            cont = ["cont", [rv], k(rv)]
+            return cps_pyfunc(f, lambda vf:
+                        cps_pyfunc(e, lambda ve:
+                             [vf, ve, cont]))
+        case ["if", cond, iftrue, iffalse]:
+            return cps_pyfunc(cond, lambda vcond:
+                                [f"$if", vcond,
+                                 cps_pyfunc(iftrue, k),
+                                 cps_pyfunc(iffalse, k)])
+    raise NotImplementedError((exp, k))
+
+def cps_cont(exp, c):
+    match exp:
+        case int(_) | str(_) | ["lambda", _, _]:
+            return [c, cps_trivial(exp)]
+        case [op, x, y] if op in ["+", "-", "*", "/"]:
+            return cps_pyfunc(x, lambda vx:
+                        cps_pyfunc(y, lambda vy:
+                            [f"${op}", vx, vy, c]))
+        case [f, e]:
+            return cps_pyfunc(f, lambda vf:
+                        cps_pyfunc(e, lambda ve:
+                            [vf, ve, c]))
+        case ["if", cond, iftrue, iffalse]:
+            return cps_pyfunc(cond, lambda vcond:
+                                [f"$if", vcond,
+                                 cps_cont(iftrue, c),
+                                 cps_cont(iffalse, c)])
+    raise NotImplementedError((exp, c))
+
+
+def cps_trivial(exp):
+    match exp:
+        case ["lambda", var, expr]:
+            k = gensym("k")
+            return ["fun", [var, k], cps_cont(expr, k)]
+        case str(_) | int(_):
+            return exp
+    raise NotImplementedError(exp)
+
+
+class MetaCPSTest(unittest.TestCase):
+    def setUp(self):
+        global GENSYM_COUNTER
+        GENSYM_COUNTER = iter(range(1000))
+
+    def test_int(self):
+        self.assertEqual(cps_cont(1, "k"), ["k", 1])
+
+    def test_var(self):
+        self.assertEqual(cps_cont("x", "k"), ["k", "x"])
+
+    def test_add(self):
+        self.assertEqual(
+            cps_cont(["+", 1, 2], "k"),
+            ["$+", 1, 2, "k"]
+        )
+
+    def test_add_nested(self):
+        self.assertEqual(
+            cps_cont(["+", 1, ["+", 2, 3]], "k"),
+            ["$+", 2, 3, ["cont", ["v0"], ["$+", 1, "v0", "k"]]]
+        )
+
+    def test_sub(self):
+        self.assertEqual(
+            cps_cont(["-", 1, 2], "k"),
+            ["$-", 1, 2, "k"]
+        )
+
+    def test_lambda_id(self):
+        self.assertEqual(
+            cps_cont(["lambda", "x", "x"], "k"),
+            ["k", ["fun", ["x", "k0"], ["k0", "x"]]]
+        )
+
+    def test_if(self):
+        self.assertEqual(
+            cps_cont(["if", 1, 2, 3], "k"),
+            ["$if", 1, ["k", 2], ["k", 3]]
+        )
+
+    def test_if_nested_cond(self):
+        self.assertEqual(
+            cps_cont(["if", ["if", 1, 2, 3], 4, 5], "k"),
+            ["$if", 1,
+             ["$if", 2, ["k", 4], ["k", 5]],
+             ["$if", 3, ["k", 4], ["k", 5]]]
+        )
+
+    def test_call(self):
+        self.assertEqual(
+            cps_cont(["f", 1], "k"),
+            ["f", 1, "k"]
+        )
+
+
 def triv(cps, env):
     match cps:
         case int(_):
