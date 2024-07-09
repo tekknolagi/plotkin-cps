@@ -111,7 +111,6 @@ def cps_pyfunc(exp, k):
                         cps_pyfunc(e, lambda ve:
                              [vf, ve, cont]))
         case ["if", cond, iftrue, iffalse]:
-            print("k", k)
             return cps_pyfunc(cond, lambda vcond:
                                 [f"$if", vcond,
                                  cps_pyfunc(iftrue, k),
@@ -132,7 +131,6 @@ def cps_cont(exp, c):
                         cps_pyfunc(e, lambda ve:
                             [vf, ve, c]))
         case ["if", cond, iftrue, iffalse]:
-            print("c", c)
             return cps_pyfunc(cond, lambda vcond:
                                 [f"$if", vcond,
                                  cps_cont(iftrue, c),
