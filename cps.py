@@ -111,6 +111,7 @@ def cps_pyfunc(exp, k):
                         cps_pyfunc(e, lambda ve:
                              [vf, ve, cont]))
         case ["if", cond, iftrue, iffalse]:
+            print("k", k)
             return cps_pyfunc(cond, lambda vcond:
                                 [f"$if", vcond,
                                  cps_pyfunc(iftrue, k),
@@ -131,6 +132,7 @@ def cps_cont(exp, c):
                         cps_pyfunc(e, lambda ve:
                             [vf, ve, c]))
         case ["if", cond, iftrue, iffalse]:
+            print("c", c)
             return cps_pyfunc(cond, lambda vcond:
                                 [f"$if", vcond,
                                  cps_cont(iftrue, c),
@@ -195,6 +197,18 @@ class MetaCPSTest(unittest.TestCase):
             ["$if", 1,
              ["$if", 2, ["k", 4], ["k", 5]],
              ["$if", 3, ["k", 4], ["k", 5]]]
+        )
+
+    def test_if_nested_cond_2(self):
+        self.assertEqual(
+            cps_cont(["if", ["if", 1, 2, 3], ["if", 4, 5, 6], ["if", 7, 8, 9]], "k"),
+            ["$if", 1,
+             ["$if", 2,
+              ["$if", 4, ["k", 5], ["k", 6]],
+              ["$if", 7, ["k", 8], ["k", 9]]],
+             ["$if", 3,
+              ["$if", 4, ["k", 5], ["k", 6]],
+              ["$if", 7, ["k", 8], ["k", 9]]]]
         )
 
     def test_call(self):
@@ -346,4 +360,5 @@ class CPSInterpTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999
     unittest.main()
