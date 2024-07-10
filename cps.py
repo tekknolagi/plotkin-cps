@@ -19,7 +19,7 @@ def cps(exp, k):
             return cps(x, ["cont", [vx],
                            cps(y, ["cont", [vy],
                                    [f"${op}", vx, vy, k]])])
-        case ["lambda", arg, body]:
+        case ["lambda", [arg], body]:
             vk = gensym("k")
             return [k, ["fun", [arg, vk], cps(body, vk)]]
         case ["if", cond, iftrue, iffalse]:
@@ -77,7 +77,7 @@ class CPSTest(unittest.TestCase):
 
     def test_lambda_id(self):
         self.assertEqual(
-            cps(["lambda", "x", "x"], "k"),
+            cps(["lambda", ["x"], "x"], "k"),
             ["k", ["fun", ["x", "k0"], ["k0", "x"]]],
         )
 
@@ -140,7 +140,7 @@ def cps_cont(exp, c):
 
 def cps_trivial(exp):
     match exp:
-        case ["lambda", var, expr]:
+        case ["lambda", [var], expr]:
             k = gensym("k")
             return ["fun", [var, k], cps_cont(expr, k)]
         case str(_) | int(_):
@@ -179,7 +179,7 @@ class MetaCPSTest(unittest.TestCase):
 
     def test_lambda_id(self):
         self.assertEqual(
-            cps_cont(["lambda", "x", "x"], "k"),
+            cps_cont(["lambda", ["x"], "x"], "k"),
             ["k", ["fun", ["x", "k0"], ["k0", "x"]]]
         )
 
@@ -397,7 +397,7 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(self._interp(["if", 0, 2, 3]), 3)
 
     def test_call_lambda_id(self):
-        self.assertEqual(self._interp([["lambda", "x", "x"], 123]), 123)
+        self.assertEqual(self._interp([["lambda", ["x"], "x"], 123]), 123)
 
 
 if __name__ == "__main__":
