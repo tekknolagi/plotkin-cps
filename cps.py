@@ -399,6 +399,10 @@ class EndToEndTests(unittest.TestCase):
     def test_call_lambda_id(self):
         self.assertEqual(self._interp([["lambda", ["x"], "x"], 123]), 123)
 
+    def test_call_lambda_add(self):
+        exp = [[["lambda", ["x"], ["lambda", ["y"], ["+", "x", "y"]]], 3], 4]
+        self.assertEqual(self._interp(exp), 7)
+
 
 if __name__ == "__main__":
     __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999
