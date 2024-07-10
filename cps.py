@@ -226,7 +226,7 @@ def triv(cps, env):
             return cps
         case ["cont", [argname], body]:
             return cps
-        case FunctionType:
+        case FunctionType():
             return cps
     raise NotImplementedError(cps)
 
@@ -250,7 +250,7 @@ def apply_cont(cont, arg, env):
         case ["cont", [argname], body]:
             interp(body, {**env, argname: arg})
             return
-        case FunctionType:
+        case FunctionType():
             cont(arg)
             return
     raise NotImplementedError(cont)
