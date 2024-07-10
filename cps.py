@@ -251,7 +251,7 @@ def apply_cont(cont, arg, env):
             interp(body, {**env, argname: arg})
             return
         case FunctionType:
-            cont(arg, env)
+            cont(arg)
             return
     raise NotImplementedError(cont)
 
@@ -296,7 +296,7 @@ class CPSInterpTests(unittest.TestCase):
     @staticmethod
     def _return():
         result = None
-        def _set(x, _env):
+        def _set(x):
             nonlocal result
             result = x
         def _get():
