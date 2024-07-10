@@ -283,11 +283,12 @@ def interp(cps, env):
         case [func, arg, k]:
             vfunc = triv(func, env)
             varg = triv(arg, env)
+            vk = triv(k, env)
             if isinstance(vfunc, FunctionType):
-                vfunc(varg, env, triv(k, env))
+                vfunc(varg, env, vk)
                 return
             argname, kname, body = unpack_func(vfunc)
-            interp(body, {**env, argname: varg, kname: k})
+            interp(body, {**env, argname: varg, kname: vk})
             return
     raise NotImplementedError(cps)
 
@@ -355,6 +356,48 @@ class CPSInterpTests(unittest.TestCase):
         interp(exp, {"f": lambda x, env, k: apply_cont(k, x+1, env),
                      "k": ["cont", ["x"], [_set, "x"]]})
         self.assertEqual(_get(), 2)
+
+
+class EndToEndTests(unittest.TestCase):
+    @staticmethod
+    def _return():
+        result = None
+        def _set(x):
+            nonlocal result
+            result = x
+        def _get():
+            return result
+        return _set, _get
+
+    def _interp(self, exp):
+        cps0 = cps(exp, "k")
+        cps1 = cps_cont(exp, "k")
+        _set0, _get0 = self._return()
+        interp(cps0, {"k": _set0})
+        _set1, _get1 = self._return()
+        interp(cps1, {"k": _set1})
+        res0 = _get0()
+        res1 = _get1()
+        self.assertEqual(res0, res1)
+        return res0
+
+    def test_int(self):
+        self.assertEqual(self._interp(1), 1)
+
+    def test_add(self):
+        self.assertEqual(self._interp(["+", 1, 2]), 3)
+
+    def test_add_nested(self):
+        self.assertEqual(self._interp(["+", 1, ["+", 2, 3]]), 6)
+
+    def test_if_true(self):
+        self.assertEqual(self._interp(["if", 1, 2, 3]), 2)
+
+    def test_if_false(self):
+        self.assertEqual(self._interp(["if", 0, 2, 3]), 3)
+
+    def test_call_lambda_id(self):
+        self.assertEqual(self._interp([["lambda", "x", "x"], 123]), 123)
 
 
 if __name__ == "__main__":
