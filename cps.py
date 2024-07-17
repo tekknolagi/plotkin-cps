@@ -130,6 +130,13 @@ def cps_cont(exp, c):
             return cps_pyfunc(f, lambda vf:
                         cps_pyfunc(e, lambda ve:
                             [vf, ve, c]))
+        case ["if", cond, iftrue, iffalse] if not isinstance(c, str):
+            cv = gensym("k")
+            exp = cps_pyfunc(cond, lambda vcond:
+                                [f"$if", vcond,
+                                 cps_cont(iftrue, cv),
+                                 cps_cont(iffalse, cv)])
+            return [["cont", [cv], exp], c]
         case ["if", cond, iftrue, iffalse]:
             return cps_pyfunc(cond, lambda vcond:
                                 [f"$if", vcond,
@@ -190,23 +197,14 @@ class MetaCPSTest(unittest.TestCase):
         )
 
     def test_if_nested_cond(self):
+        k = ["cont", ["v0"], ["print", "v0"]]
         self.assertEqual(
-            cps_cont(["if", ["if", 1, 2, 3], 4, 5], "k"),
-            ["$if", 1,
-             ["$if", 2, ["k", 4], ["k", 5]],
-             ["$if", 3, ["k", 4], ["k", 5]]]
-        )
-
-    def test_if_nested_cond_2(self):
-        self.assertEqual(
-            cps_cont(["if", ["if", 1, 2, 3], ["if", 4, 5, 6], ["if", 7, 8, 9]], "k"),
-            ["$if", 1,
-             ["$if", 2,
-              ["$if", 4, ["k", 5], ["k", 6]],
-              ["$if", 7, ["k", 8], ["k", 9]]],
-             ["$if", 3,
-              ["$if", 4, ["k", 5], ["k", 6]],
-              ["$if", 7, ["k", 8], ["k", 9]]]]
+            cps_cont(["if", ["if", 1, 2, 3], 4, 5], k),
+            [["cont", ["k0"],
+              ["$if", 1,
+               ["$if", 2, ["k0", 4], ["k0", 5]],
+               ["$if", 3, ["k0", 4], ["k0", 5]]]],
+             ["cont", ["v0"], ["print", "v0"]]]
         )
 
     def test_call(self):
