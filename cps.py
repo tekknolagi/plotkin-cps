@@ -87,6 +87,25 @@ class CPSTest(unittest.TestCase):
             [["cont", ["k1"], [["cont", ["v0"], ["$if", "v0", ["k1", 2], ["k1", 3]]], 1]], "k"]
         )
 
+    def test_if_nested_cond(self):
+        self.assertEqual(
+            cps(["if", ["if", 1, 2, 3], ["+", 4, 4], ["+", 5, 5]], "k"),
+            # (+ 4 4) and (+ 5 5) are not duplicated
+            [["cont", ["k1"],
+              [["cont", ["k7"],
+                [["cont", ["v6"],
+                  ["$if", "v6", ["k7", 2], ["k7", 3]]], 1]],
+               ["cont", ["v0"],
+                ["$if", "v0",
+                 [["cont", ["v2"],
+                   [["cont", ["v3"],
+                     ["$+", "v2", "v3", "k1"]], 4]], 4],
+                 [["cont", ["v4"],
+                   [["cont", ["v5"],
+                     ["$+", "v4", "v5", "k1"]], 5]], 5]]]]],
+             "k"]
+        )
+
     def test_call(self):
         self.assertEqual(
             cps(["f", 1], "k"),
