@@ -122,8 +122,7 @@ def cps_pyfunc(exp, k):
 def dedup(cont, k):
     if isinstance(cont, str):
         return k(cont)
-    kv = gensym("k")
-    return [["cont", [kv], k(kv)], cont]
+    return [reify(k), cont]
 
 
 def cps_cont(exp, c):
@@ -199,10 +198,11 @@ class MetaCPSTest(unittest.TestCase):
         )
 
     def test_if_cont_is_not_duplicated(self):
-        k = ["cont", ["v0"], ["print", "v0"]]
+        v = gensym()
+        k = ["cont", [v], ["print", v]]
         self.assertEqual(
             cps_cont(["if", 1, 2, 3], k),
-            [["cont", ["k0"], ["$if", 1, ["k0", 2], ["k0", 3]]],
+            [["cont", ["v1"], ["$if", 1, ["v1", 2], ["v1", 3]]],
              ["cont", ["v0"], ["print", "v0"]]]
         )
 
