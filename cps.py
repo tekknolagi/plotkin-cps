@@ -118,6 +118,13 @@ def cps_pyfunc(exp, k):
     raise NotImplementedError((exp, k))
 
 
+def dedup(cont, k):
+    if isinstance(cont, str):
+        return k(cont)
+    kv = gensym("k")
+    return [["cont", [kv], k(kv)], cont]
+
+
 def cps_cont(exp, c):
     match exp:
         case int(_) | str(_) | ["lambda", _, _]:
@@ -130,18 +137,12 @@ def cps_cont(exp, c):
             return cps_pyfunc(f, lambda vf:
                         cps_pyfunc(e, lambda ve:
                             [vf, ve, c]))
-        case ["if", cond, iftrue, iffalse] if not isinstance(c, str):
-            cv = gensym("k")
-            exp = cps_pyfunc(cond, lambda vcond:
-                                [f"$if", vcond,
-                                 cps_cont(iftrue, cv),
-                                 cps_cont(iffalse, cv)])
-            return [["cont", [cv], exp], c]
         case ["if", cond, iftrue, iffalse]:
-            return cps_pyfunc(cond, lambda vcond:
-                                [f"$if", vcond,
-                                 cps_cont(iftrue, c),
-                                 cps_cont(iffalse, c)])
+            return dedup(c, lambda vc:
+                         cps_pyfunc(cond, lambda vcond:
+                             [f"$if", vcond,
+                              cps_cont(iftrue, vc),
+                              cps_cont(iffalse, vc)]))
     raise NotImplementedError((exp, c))
 
 
