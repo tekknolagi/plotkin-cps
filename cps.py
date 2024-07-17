@@ -196,15 +196,22 @@ class MetaCPSTest(unittest.TestCase):
             ["$if", 1, ["k", 2], ["k", 3]]
         )
 
-    def test_if_nested_cond(self):
+    def test_if_cont_is_not_duplicated(self):
         k = ["cont", ["v0"], ["print", "v0"]]
         self.assertEqual(
-            cps_cont(["if", ["if", 1, 2, 3], 4, 5], k),
-            [["cont", ["k0"],
-              ["$if", 1,
-               ["$if", 2, ["k0", 4], ["k0", 5]],
-               ["$if", 3, ["k0", 4], ["k0", 5]]]],
+            cps_cont(["if", 1, 2, 3], k),
+            [["cont", ["k0"], ["$if", 1, ["k0", 2], ["k0", 3]]],
              ["cont", ["v0"], ["print", "v0"]]]
+        )
+
+    def test_if_nested_cond(self):
+        self.assertEqual(
+            cps_cont(["if", ["if", 1, 2, 3], ["+", 4, 4], ["+", 5, 5]], "k"),
+            # TODO(max): Figure out what to do about the code duplication of
+            # the iftrue and iffalse
+            ["$if", 1,
+             ["$if", 2, ["$+", 4, 4, "k"], ["$+", 5, 5, "k"]],
+             ["$if", 3, ["$+", 4, 4, "k"], ["$+", 5, 5, "k"]]]
         )
 
     def test_call(self):
