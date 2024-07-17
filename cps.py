@@ -94,22 +94,23 @@ class CPSTest(unittest.TestCase):
         )
 
 
+def reify(k):
+    rv = gensym()
+    return ["cont", [rv], k(rv)]
+
+
 def cps_pyfunc(exp, k):
     match exp:
         case int(_) | str(_) | ["lambda", _, _]:
             return k(cps_trivial(exp))
         case [op, x, y] if op in ["+", "-", "*", "/"]:
-            rv = gensym()
-            cont = ["cont", [rv], k(rv)]
             return cps_pyfunc(x, lambda vx:
                         cps_pyfunc(y, lambda vy:
-                            [f"${op}", vx, vy, cont]))
+                            [f"${op}", vx, vy, reify(k)]))
         case [f, e]:
-            rv = gensym()
-            cont = ["cont", [rv], k(rv)]
             return cps_pyfunc(f, lambda vf:
                         cps_pyfunc(e, lambda ve:
-                             [vf, ve, cont]))
+                             [vf, ve, reify(k)]))
         case ["if", cond, iftrue, iffalse]:
             return cps_pyfunc(cond, lambda vcond:
                                 [f"$if", vcond,
