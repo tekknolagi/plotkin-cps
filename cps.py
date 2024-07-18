@@ -25,12 +25,11 @@ def cps(exp, k):
         case ["if", cond, iftrue, iffalse]:
             vcond = gensym()
             vk = gensym("k")
-            return ["$ret", ["cont", [vk],
+            return ["let", [[vk, k]],
                        cps(cond, ["cont", [vcond],
                                   ["$if", vcond,
                                    cps(iftrue, vk),
-                                   cps(iffalse, vk)]]),
-                     ], k]
+                                   cps(iffalse, vk)]])]
         case [func, arg]:
             vfunc = gensym()
             varg = gensym()
@@ -84,26 +83,26 @@ class CPSTest(unittest.TestCase):
     def test_if(self):
         self.assertEqual(
             cps(["if", 1, 2, 3], "k"),
-            ["$ret", ["cont", ["k1"], ["$ret", ["cont", ["v0"], ["$if", "v0", ["$ret", "k1", 2], ["$ret", "k1", 3]]], 1]], "k"]
+            ["let", [["k1", "k"]], ["$ret", ["cont", ["v0"], ["$if", "v0", ["$ret", "k1", 2], ["$ret", "k1", 3]]], 1]]
         )
 
     def test_if_nested_cond(self):
         self.assertEqual(
             cps(["if", ["if", 1, 2, 3], ["+", 4, 4], ["+", 5, 5]], "k"),
             # (+ 4 4) and (+ 5 5) are not duplicated
-            ["$ret", ["cont", ["k1"],
-              ["$ret", ["cont", ["k7"],
-                ["$ret", ["cont", ["v6"],
-                  ["$if", "v6", ["$ret", "k7", 2], ["$ret", "k7", 3]]], 1]],
-               ["cont", ["v0"],
-                ["$if", "v0",
-                 ["$ret", ["cont", ["v2"],
-                   ["$ret", ["cont", ["v3"],
-                     ["$+", "v2", "v3", "k1"]], 4]], 4],
-                 ["$ret", ["cont", ["v4"],
-                   ["$ret", ["cont", ["v5"],
-                     ["$+", "v4", "v5", "k1"]], 5]], 5]]]]],
-             "k"]
+            ["let", [["k1", "k"]],
+             ["let", [["k7", ["cont", ["v0"],
+                              ["$if", "v0",
+                               ["$ret", ["cont", ["v2"],
+                                         ["$ret", ["cont", ["v3"],
+                                                   ["$+", "v2", "v3", "k1"]], 4]], 4],
+                               ["$ret", ["cont", ["v4"],
+                                         ["$ret", ["cont", ["v5"],
+                                                   ["$+", "v4", "v5", "k1"]], 5]], 5]]]]],
+              ["$ret", ["cont", ["v6"],
+                        ["$if", "v6",
+                         ["$ret", "k7", 2],
+                         ["$ret", "k7", 3]]], 1]]]
         )
 
     def test_call(self):
@@ -141,7 +140,8 @@ def cps_pyfunc(exp, k):
 def dedup(cont, k):
     if isinstance(cont, str):
         return k(cont)
-    return ["$ret", reify(k), cont]
+    vk = gensym("k")
+    return ["let", [[vk, cont]], k(vk)]
 
 
 def cps_cont(exp, c):
@@ -221,8 +221,11 @@ class MetaCPSTest(unittest.TestCase):
         k = ["cont", [v], ["print", v]]
         self.assertEqual(
             cps_cont(["if", 1, 2, 3], k),
-            ["$ret", ["cont", ["v1"], ["$if", 1, ["$ret", "v1", 2], ["$ret", "v1", 3]]],
-             ["cont", ["v0"], ["print", "v0"]]]
+            ["let", [["k1", ["cont", ["v0"],
+                             ["print", "v0"]]]],
+             ["$if", 1,
+              ["$ret", "k1", 2],
+              ["$ret", "k1", 3]]]
         )
 
     def test_if_nested_cond(self):
@@ -300,6 +303,12 @@ def interp(cps, env):
                 interp(iftrue, env)
             else:
                 interp(iffalse, env)
+            return
+        case ["let", bindings, body]:
+            newenv = env.copy()
+            for name, value in bindings:
+                newenv[name] = triv(value, env)
+            interp(body, newenv)
             return
         case ["$ret", cont, arg]:
             vcont = triv(cont, env)
