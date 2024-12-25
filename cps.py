@@ -12,9 +12,9 @@ def gensym(stem="v"):
 def cps(exp, k):
     match exp:
         case int(_) | str(_):
-            # $ret is equivalent to "call continuation" and is part of a
+            # $call-cont is equivalent to "call continuation" and is part of a
             # syntactic factoring of CPS into "real lambdas" and continuations
-            return ["$ret", k, exp]
+            return ["$call-cont", k, exp]
         case [op, x, y] if op in ["+", "-", "*", "/"]:
             vx = gensym()
             vy = gensym()
@@ -23,15 +23,24 @@ def cps(exp, k):
                                    [f"${op}", vx, vy, k]])])
         case ["lambda", [arg], body]:
             vk = gensym("k")
-            return ["$ret", k, ["fun", [arg, vk], cps(body, vk)]]
+            return ["$call-cont", k, ["fun", [arg, vk], cps(body, vk)]]
+        # case ["if", cond, iftrue, iffalse]:
+        #     vcond = gensym()
+        #     return cps(cond, ["cont", [vcond],
+        #                         ["$ifzero", vcond,
+        #                            cps(iftrue, k),
+        #                            cps(iffalse, k)]])
         case ["if", cond, iftrue, iffalse]:
             vcond = gensym()
             vk = gensym("k")
-            return ["let", [[vk, k]],
+            return ["$call-cont", ["cont", [vk],
                        cps(cond, ["cont", [vcond],
                                   ["$if", vcond,
                                    cps(iftrue, vk),
-                                   cps(iffalse, vk)]])]
+                                   cps(iffalse, vk)]])], k]
+        case ["let", [name, value], body]:
+            return cps(value, ["cont", [name],
+                               cps(body, k)])
         case [func, arg]:
             vfunc = gensym()
             varg = gensym()
@@ -47,23 +56,23 @@ class CPSTest(unittest.TestCase):
         GENSYM_COUNTER = iter(range(1000))
 
     def test_int(self):
-        self.assertEqual(cps(1, "k"), ["$ret", "k", 1])
+        self.assertEqual(cps(1, "k"), ["$call-cont", "k", 1])
 
     def test_var(self):
-        self.assertEqual(cps("x", "k"), ["$ret", "k", "x"])
+        self.assertEqual(cps("x", "k"), ["$call-cont", "k", "x"])
 
     def test_add(self):
         self.assertEqual(
             cps(["+", 1, 2], "k"),
-            ["$ret", ["cont", ["v0"], ["$ret", ["cont", ["v1"], ["$+", "v0", "v1", "k"]], 2]], 1],
+            ["$call-cont", ["cont", ["v0"], ["$call-cont", ["cont", ["v1"], ["$+", "v0", "v1", "k"]], 2]], 1],
         )
 
     def test_add_nested(self):
         self.assertEqual(
             cps(["+", 1, ["+", 2, 3]], "k"),
-            ["$ret", ["cont", ["v0"],
-              ["$ret", ["cont", ["v2"],
-                ["$ret", ["cont", ["v3"],
+            ["$call-cont", ["cont", ["v0"],
+              ["$call-cont", ["cont", ["v2"],
+                ["$call-cont", ["cont", ["v3"],
                   ["$+", "v2", "v3", ["cont", ["v1"], ["$+", "v0", "v1", "k"]]]],
                  3]],
                2]],
@@ -73,44 +82,68 @@ class CPSTest(unittest.TestCase):
     def test_sub(self):
         self.assertEqual(
             cps(["-", 1, 2], "k"),
-            ["$ret", ["cont", ["v0"], ["$ret", ["cont", ["v1"], ["$-", "v0", "v1", "k"]], 2]], 1],
+            ["$call-cont", ["cont", ["v0"], ["$call-cont", ["cont", ["v1"], ["$-", "v0", "v1", "k"]], 2]], 1],
         )
 
     def test_lambda_id(self):
         self.assertEqual(
             cps(["lambda", ["x"], "x"], "k"),
-            ["$ret", "k", ["fun", ["x", "k0"], ["$ret", "k0", "x"]]],
+            ["$call-cont", "k", ["fun", ["x", "k0"], ["$call-cont", "k0", "x"]]],
         )
 
     def test_if(self):
         self.assertEqual(
             cps(["if", 1, 2, 3], "k"),
-            ["let", [["k1", "k"]], ["$ret", ["cont", ["v0"], ["$if", "v0", ["$ret", "k1", 2], ["$ret", "k1", 3]]], 1]]
+            ["$call-cont", ["cont", ["k1"],
+                            ["$call-cont", ["cont", ["v0"],
+                                            ["$if", "v0",
+                                                    ["$call-cont", "k1", 2],
+                                                    ["$call-cont", "k1", 3]]],
+                             1]],
+             "k"]
         )
 
     def test_if_nested_cond(self):
         self.assertEqual(
             cps(["if", ["if", 1, 2, 3], ["+", 4, 4], ["+", 5, 5]], "k"),
             # (+ 4 4) and (+ 5 5) are not duplicated
-            ["let", [["k1", "k"]],
-             ["let", [["k7", ["cont", ["v0"],
+            ["$call-cont", ["cont", ["k1"],
+                            ["$call-cont", ["cont", ["k7"],
+                                            ["$call-cont", ["cont", ["v6"],
+                                                            ["$if", "v6",
+                                                                    ["$call-cont", "k7", 2],
+                                                                    ["$call-cont", "k7", 3]]],
+                                             1]],
+                             ["cont", ["v0"],
                               ["$if", "v0",
-                               ["$ret", ["cont", ["v2"],
-                                         ["$ret", ["cont", ["v3"],
-                                                   ["$+", "v2", "v3", "k1"]], 4]], 4],
-                               ["$ret", ["cont", ["v4"],
-                                         ["$ret", ["cont", ["v5"],
-                                                   ["$+", "v4", "v5", "k1"]], 5]], 5]]]]],
-              ["$ret", ["cont", ["v6"],
-                        ["$if", "v6",
-                         ["$ret", "k7", 2],
-                         ["$ret", "k7", 3]]], 1]]]
+                                      ["$call-cont", ["cont", ["v2"],
+                                                      ["$call-cont", ["cont", ["v3"],
+                                                                      ["$+", "v2", "v3", "k1"]],
+                                                       4]],
+                                       4], ["$call-cont", ["cont", ["v4"],
+                                                           ["$call-cont", ["cont", ["v5"],
+                                                                           ["$+", "v4", "v5", "k1"]],
+                                                            5]],
+                                            5]]]]],
+             "k"]
         )
 
     def test_call(self):
         self.assertEqual(
             cps(["f", 1], "k"),
-            ["$ret", ["cont", ["v0"], ["$ret", ["cont", ["v1"], ["v0", "v1", "k"]], 1]], "f"]
+            ["$call-cont", ["cont", ["v0"], ["$call-cont", ["cont", ["v1"], ["v0", "v1", "k"]], 1]], "f"]
+        )
+
+    def test_let(self):
+        self.assertEqual(
+            cps(["let", ["x", 1], ["+", "x", 2]], "k"),
+            ['$call-cont', ['cont', ['x'],
+                            ['$call-cont', ['cont', ['v0'],
+                                            ['$call-cont', ['cont', ['v1'],
+                                                            ['$+', 'v0', 'v1', 'k']],
+                                             2]],
+                             'x']],
+             1]
         )
 
 
@@ -149,7 +182,7 @@ def dedup(cont, k):
 def cps_cont(exp, c):
     match exp:
         case int(_) | str(_) | ["lambda", _, _]:
-            return ["$ret", c, cps_trivial(exp)]
+            return ["$call-cont", c, cps_trivial(exp)]
         case [op, x, y] if op in ["+", "-", "*", "/"]:
             return cps_pyfunc(x, lambda vx:
                         cps_pyfunc(y, lambda vy:
@@ -183,10 +216,10 @@ class MetaCPSTest(unittest.TestCase):
         GENSYM_COUNTER = iter(range(1000))
 
     def test_int(self):
-        self.assertEqual(cps_cont(1, "k"), ["$ret", "k", 1])
+        self.assertEqual(cps_cont(1, "k"), ["$call-cont", "k", 1])
 
     def test_var(self):
-        self.assertEqual(cps_cont("x", "k"), ["$ret", "k", "x"])
+        self.assertEqual(cps_cont("x", "k"), ["$call-cont", "k", "x"])
 
     def test_add(self):
         self.assertEqual(
@@ -209,13 +242,13 @@ class MetaCPSTest(unittest.TestCase):
     def test_lambda_id(self):
         self.assertEqual(
             cps_cont(["lambda", ["x"], "x"], "k"),
-            ["$ret", "k", ["fun", ["x", "k0"], ["$ret", "k0", "x"]]]
+            ["$call-cont", "k", ["fun", ["x", "k0"], ["$call-cont", "k0", "x"]]]
         )
 
     def test_if(self):
         self.assertEqual(
             cps_cont(["if", 1, 2, 3], "k"),
-            ["$if", 1, ["$ret", "k", 2], ["$ret", "k", 3]]
+            ["$if", 1, ["$call-cont", "k", 2], ["$call-cont", "k", 3]]
         )
 
     def test_if_cont_is_not_duplicated(self):
@@ -226,8 +259,8 @@ class MetaCPSTest(unittest.TestCase):
             ["let", [["k1", ["cont", ["v0"],
                              ["print", "v0"]]]],
              ["$if", 1,
-              ["$ret", "k1", 2],
-              ["$ret", "k1", 3]]]
+              ["$call-cont", "k1", 2],
+              ["$call-cont", "k1", 3]]]
         )
 
     def test_if_nested_cond(self):
@@ -312,7 +345,7 @@ def interp(cps, env):
                 newenv[name] = triv(value, env)
             interp(body, newenv)
             return
-        case ["$ret", cont, arg]:
+        case ["$call-cont", cont, arg]:
             vcont = triv(cont, env)
             varg = triv(arg, env)
             apply_cont(vcont, varg, env)
@@ -343,7 +376,7 @@ class CPSInterpTests(unittest.TestCase):
 
     def test_ret(self):
         _set, _get = self._return()
-        interp(["$ret", "k", 1], {"k": _set})
+        interp(["$call-cont", "k", 1], {"k": _set})
         self.assertEqual(_get(), 1)
 
     def test_add(self):
@@ -368,31 +401,54 @@ class CPSInterpTests(unittest.TestCase):
 
     def test_lambda_id(self):
         _set, _get = self._return()
-        interp(["$ret", "k", ["fun", ["x", "k0"], ["$ret", "k0", "x"]]], {"k": _set})
-        self.assertEqual(_get(), ["fun", ["x", "k0"], ["$ret", "k0", "x"]])
+        interp(["$call-cont", "k", ["fun", ["x", "k0"], ["$call-cont", "k0", "x"]]], {"k": _set})
+        self.assertEqual(_get(), ["fun", ["x", "k0"], ["$call-cont", "k0", "x"]])
 
     def test_if_true(self):
         _set, _get = self._return()
-        interp(["$if", 1, ["$ret", "k1", 2], ["$ret", "k1", 3]], {"k1": _set})
+        interp(["$if", 1, ["$call-cont", "k1", 2], ["$call-cont", "k1", 3]], {"k1": _set})
         self.assertEqual(_get(), 2)
 
     def test_if_false(self):
         _set, _get = self._return()
-        interp(["$if", 0, ["$ret", "k1", 2], ["$ret", "k1", 3]], {"k1": _set})
+        interp(["$if", 0, ["$call-cont", "k1", 2], ["$call-cont", "k1", 3]], {"k1": _set})
         self.assertEqual(_get(), 3)
 
     def test_call(self):
         _set, _get = self._return()
-        exp = ["$ret", ["cont", ["v0"], ["$ret", ["cont", ["v1"], ["v0", "v1", "k"]], 1]], "f"]
+        exp = ["$call-cont", ["cont", ["v0"], ["$call-cont", ["cont", ["v1"], ["v0", "v1", "k"]], 1]], "f"]
         interp(exp, {"f": lambda x, env, k: apply_cont(k, x+1, env), "k": _set})
         self.assertEqual(_get(), 2)
 
     def test_call_reentrant(self):
         _set, _get = self._return()
-        exp = ["$ret", ["cont", ["v0"], ["$ret", ["cont", ["v1"], ["v0", "v1", "k"]], 1]], "f"]
+        exp = ["$call-cont", ["cont", ["v0"], ["$call-cont", ["cont", ["v1"], ["v0", "v1", "k"]], 1]], "f"]
         interp(exp, {"f": lambda x, env, k: apply_cont(k, x+1, env),
-                     "k": ["cont", ["x"], ["$ret", _set, "x"]]})
+                     "k": ["cont", ["x"], ["$call-cont", _set, "x"]]})
         self.assertEqual(_get(), 2)
+
+
+["$+", "3", "4", "k"]  # => ["$call-cont", "k", 7]
+
+["$call-cont", ["cont", ["k1"],
+                 ["$call-cont", ["cont", ["v0"],
+                                  ["$if", "v0",
+                                    ["$call-cont", "k1", 2],
+                                    ["$call-cont", "k1", 3]]],
+                                  1]],
+                 "k"]
+
+["$call-cont", ["cont", ["v0"],
+                 ["$if", "v0",
+                   ["$call-cont", "k", 2],
+                   ["$call-cont", "k", 3]]],
+                 1]
+
+["$if", 1,
+  ["$call-cont", "k", 2],
+  ["$call-cont", "k", 3]]
+
+["$call-cont", "k", 2]
 
 
 class EndToEndTests(unittest.TestCase):
