@@ -428,29 +428,6 @@ class CPSInterpTests(unittest.TestCase):
         self.assertEqual(_get(), 2)
 
 
-["$+", "3", "4", "k"]  # => ["$call-cont", "k", 7]
-
-["$call-cont", ["cont", ["k1"],
-                 ["$call-cont", ["cont", ["v0"],
-                                  ["$if", "v0",
-                                    ["$call-cont", "k1", 2],
-                                    ["$call-cont", "k1", 3]]],
-                                  1]],
-                 "k"]
-
-["$call-cont", ["cont", ["v0"],
-                 ["$if", "v0",
-                   ["$call-cont", "k", 2],
-                   ["$call-cont", "k", 3]]],
-                 1]
-
-["$if", 1,
-  ["$call-cont", "k", 2],
-  ["$call-cont", "k", 3]]
-
-["$call-cont", "k", 2]
-
-
 class EndToEndTests(unittest.TestCase):
     @staticmethod
     def _return():
