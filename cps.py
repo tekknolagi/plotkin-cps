@@ -12,8 +12,6 @@ def gensym(stem="v"):
 def cps(exp, k):
     match exp:
         case int(_) | str(_):
-            # $call-cont is equivalent to "call continuation" and is part of a
-            # syntactic factoring of CPS into "real lambdas" and continuations
             return ["$call-cont", k, exp]
         case [op, x, y] if op in ["+", "-", "*", "/"]:
             vx = gensym()
