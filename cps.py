@@ -470,6 +470,160 @@ class EndToEndTests(unittest.TestCase):
         self.assertEqual(self._interp(exp), 7)
 
 
+def free_in(exp):
+    match exp:
+        case int(_):
+            return set()
+        case str(_):
+            return {exp}
+        case ["cont", args, body] | ["cont", args, _, body]:
+            return free_in(body) - set(args)
+        case ["fun", args, body] | ["fun", args, _, body]:
+            return free_in(body) - set(args)
+        case ["$if", cond, iftrue, iffalse]:
+            return free_in(cond) | free_in(iftrue) | free_in(iffalse)
+        case ["$call-cont", cont, arg]:
+            return free_in(cont) | free_in(arg)
+        case [op, x, y, k] if op in ["$+", "$-", "$*", "$/"]:
+            return free_in(x) | free_in(y) | free_in(k)
+        case [func, arg, k]:
+            return free_in(func) | free_in(arg) | free_in(k)
+        case _:
+            raise NotImplementedError(exp)
+
+
+class FreeInTests(unittest.TestCase):
+    def test_free_in_int(self):
+        self.assertEqual(free_in(1), set())
+
+    def test_free_in_var(self):
+        self.assertEqual(free_in("x"), {"x"})
+
+    def test_free_in_cont(self):
+        self.assertEqual(free_in(["cont", ["x"], "x"]), set())
+        self.assertEqual(free_in(["cont", ["x"], "y"]), {"y"})
+
+    def test_free_in_fun(self):
+        self.assertEqual(free_in(["fun", ["x", "k"], "x"]), set())
+        self.assertEqual(free_in(["fun", ["x", "k"], "k"]), set())
+        self.assertEqual(free_in(["fun", ["x", "k"], "y"]), {"y"})
+
+    def test_free_in_if(self):
+        self.assertEqual(free_in(["$if", "x", "y", "z"]), {"x", "y", "z"})
+
+    def test_free_in_call_cont(self):
+        self.assertEqual(free_in(["$call-cont", "k", "x"]), {"k", "x"})
+
+    def test_free_in_op(self):
+        self.assertEqual(free_in(["$+", "x", "y", "k"]), {"x", "y", "k"})
+
+    def test_free_in_call(self):
+        self.assertEqual(free_in(["f", "x", "k"]), {"f", "x", "k"})
+
+
+def map_func(exp, f):
+    match exp:
+        case ["cont", [arg], body]:
+            return f(["cont", [arg], {}, map_func(body, f)])
+        case ["cont", [arg], ann, body]:
+            return f(["cont", [arg], ann, map_func(body, f)])
+        case ["fun", [arg, k], body]:
+            return f(["fun", [arg, k], {}, map_func(body, f)])
+        case ["fun", [arg, k], ann, body]:
+            return f(["fun", [arg, k], ann, map_func(body, f)])
+
+        case int(_) | str(_):
+            return exp
+        case ["$if", cond, iftrue, iffalse]:
+            return ["$if", map_func(cond, f), map_func(iftrue, f), map_func(iffalse, f)]
+        case ["$call-cont", cont, arg]:
+            return ["$call-cont", map_func(cont, f), map_func(arg, f)]
+        case [op, x, y, k] if op in ["$+", "$-", "$*", "$/"]:
+            return [op, map_func(x, f), map_func(y, f), map_func(k, f)]
+        case [func, arg, k]:
+            return [map_func(func, f), map_func(arg, f), map_func(k, f)]
+        case _:
+            raise NotImplementedError(exp)
+
+
+def _annotate_freevars(exp):
+    fv = {"freevars": sorted(free_in(exp))}
+    match exp:
+        case ["cont", [arg], ann, body]:
+            return ["cont", [arg], {**ann, **fv}, body]
+        case ["fun", [arg, k], ann, body]:
+            # TODO(max): Don't allocate closure if no freevars
+            return ["fun", [arg, k], {**ann, **fv, "clo": gensym("c")}, body]
+        case _:
+            raise NotImplementedError(exp)
+
+
+def annotate_freevars(exp):
+    return map_func(exp, _annotate_freevars)
+
+
+class AnnotateFreeVarsTests(UseGensym):
+    def test_cont(self):
+        self.assertEqual(annotate_freevars(["cont", ["x"], "y"]),
+                         ["cont", ["x"], {"freevars": ["y"]}, "y"])
+
+    def test_fun(self):
+        self.assertEqual(annotate_freevars(["fun", ["x", "k"], "y"]),
+                         ["fun", ["x", "k"], {"freevars": ["y"], "clo": "c0"}, "y"])
+
+
+def _map_ann(exp, ann, f):
+    match exp:
+        case int(_) | str(_):
+            return f(exp, ann)
+        case ["cont", [arg], new_ann, body]:
+            return f(["cont", [arg], new_ann, _map_ann(body, new_ann, f)], ann)
+        case ["fun", [arg, k], new_ann, body]:
+            return f(["fun", [arg, k], new_ann, _map_ann(body, new_ann, f)], ann)
+        case ["$if", cond, iftrue, iffalse]:
+            return f(["$if", _map_ann(cond, ann, f),
+                      _map_ann(iftrue, ann, f),
+                      _map_ann(iffalse, ann, f)], ann)
+        case ["$call-cont", cont, arg]:
+            return f(["$call-cont", _map_ann(cont, ann, f), _map_ann(arg, ann, f)], ann)
+        case [op, x, y, k] if op in ["$+", "$-", "$*", "$/"]:
+            return f([op, _map_ann(x, ann, f), _map_ann(y, ann, f), _map_ann(k, ann, f)], ann)
+        case [func, arg, k]:
+            return f([_map_ann(func, ann, f), _map_ann(arg, ann, f), _map_ann(k, ann, f)], ann)
+        case _:
+            raise NotImplementedError(exp)
+
+
+def map_ann(exp, f):
+    return _map_ann(exp, {}, f)
+
+
+def _clo_ref(exp, ann):
+    match exp:
+        case str(_):
+            if "freevars" in ann and exp in ann["freevars"]:
+                return ["$clo-ref", ann["clo"], exp]
+            return exp
+        case _:
+            return exp
+
+
+def clo_ref(exp):
+    return map_ann(exp, _clo_ref)
+
+
+class AddClosureParamsTests(unittest.TestCase):
+    def test_var(self):
+        self.assertEqual(clo_ref("x"), "x")
+
+    def test_clo_ref(self):
+        self.assertEqual(
+                clo_ref(["fun", ["x", "k"], {"clo": "c0", "freevars": ["y"]},
+                          ["$+", "x", "y", "k"]]),
+                ["fun", ["x", "k"], {"clo": "c0", "freevars": ["y"]},
+                  ["$+", "x", ["$clo-ref", "c0", "y"], "k"]])
+
+
 if __name__ == "__main__":
     __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999
     unittest.main()
