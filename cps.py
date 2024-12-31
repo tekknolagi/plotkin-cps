@@ -48,11 +48,13 @@ def cps(exp, k):
     raise NotImplementedError("Not implemented")
 
 
-class CPSTest(unittest.TestCase):
+class UseGensym(unittest.TestCase):
     def setUp(self):
         global GENSYM_COUNTER
         GENSYM_COUNTER = iter(range(1000))
 
+
+class CPSTest(UseGensym):
     def test_int(self):
         self.assertEqual(cps(1, "k"), ["$call-cont", "k", 1])
 
@@ -208,11 +210,7 @@ def cps_trivial(exp):
     raise NotImplementedError(exp)
 
 
-class MetaCPSTest(unittest.TestCase):
-    def setUp(self):
-        global GENSYM_COUNTER
-        GENSYM_COUNTER = iter(range(1000))
-
+class MetaCPSTest(UseGensym):
     def test_int(self):
         self.assertEqual(cps_cont(1, "k"), ["$call-cont", "k", 1])
 
