@@ -23,6 +23,11 @@ non-trivial expressions only in tail position or as the bound value in a let.
 In an actual compiler the source program could be put in this form either by a
 pre-pass or as part of a more complex CPS algorithm. We also assume that every
 identifier is unique.
+
+As we are not interested in interprocedural analysis we will treat each l_proc
+as a separate program (here we depend on the assumption that explicit
+environments have been introduced to take care of lexical scoping for any
+nested l_proc's).
 """
 
 
