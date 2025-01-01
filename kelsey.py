@@ -92,7 +92,7 @@ def F(exp, k):
             v = gensym()
             assert is_trivial(fn), "Function must be trivial"
             assert all(is_trivial(arg) for arg in args), "Arguments must be trivial"
-            return ["let", [[v, exp]], ["jmp", k]]
+            return ["let", [[v, exp]], ["jmp", k, v]]
         case [fn, *args]:
             assert is_trivial(fn), "Function must be trivial"
             assert all(is_trivial(arg) for arg in args), "Arguments must be trivial"
@@ -135,7 +135,7 @@ class CPSConversionTests(UseGensym):
         exp = ["f", 1, 2]
         self.assertEqual(F(exp, "$k0"),
                          ["let", [["v0", ["f", 1, 2]]],
-                          ["jmp", "$k0"]])
+                          ["jmp", "$k0", "v0"]])
 
     def test_app_cont(self):
         exp = ["f", 1, 2]
@@ -143,6 +143,16 @@ class CPSConversionTests(UseGensym):
                          ["f", 1, 2, "k0"])
         self.assertEqual(F(exp, ["l_cont", ["x"], "k_body"]),
                          ["f", 1, 2, ["l_cont", ["x"], "k_body"]])
+
+    def test_if_app(self):
+        exp = ["if", 1, ["f", 2], ["g", 3]]
+        self.assertEqual(F(exp, ["l_cont", ["x"], "k_body"]),
+                         ["letrec", [["$k0", ["l_jump", ["x"], "k_body"]]],
+                          ["if", 1,
+                           ["let", [["v1", ["f", 2]]],
+                            ["jmp", "$k0", "v1"]],
+                           ["let", [["v2", ["g", 3]]],
+                            ["jmp", "$k0", "v2"]]]])
 
     def test_lambda(self):
         exp = ["lambda", ["x"], ["+", "x", 1]]
