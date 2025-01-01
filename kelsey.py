@@ -66,7 +66,10 @@ def F(exp, k):
         assert isinstance(k, str)
     match exp:
         case int(_) | str(_) | ["+", *_] if isinstance(k, str):
-            return [k, exp]
+            if k[0] == "$":
+                # Letrec-bound jmp continuation
+                return ["$jmp", k, exp]
+            return ["$call-cont", k, exp]
         case int(_) | str(_) | ["+", *_]:
             _, [k_arg], k_body = k
             return ["let", [[k_arg, exp]], k_body]
@@ -88,11 +91,13 @@ def F(exp, k):
             return ["letrec", [[kvar, ["l_jump", [k_arg], k_body]]],
                     ["if", test, F(conseq, kvar), F(alt, kvar)]]
         case [fn, *args] if isinstance(k, str) and k[0] == "$":
-            # Letrec-bound continuation
+            # Letrec-bound jmp continuation
             v = gensym()
             assert is_trivial(fn), "Function must be trivial"
             assert all(is_trivial(arg) for arg in args), "Arguments must be trivial"
-            return ["let", [[v, exp]], ["jmp", k, v]]
+            # TODO(max): Convert to call to F to make sure this $jmp logic is
+            # in one place?
+            return ["let", [[v, exp]], ["$jmp", k, v]]
         case [fn, *args]:
             assert is_trivial(fn), "Function must be trivial"
             assert all(is_trivial(arg) for arg in args), "Arguments must be trivial"
@@ -109,33 +114,36 @@ class UseGensym(unittest.TestCase):
 
 class CPSConversionTests(UseGensym):
     def test_int(self):
-        self.assertEqual(F(42, "k"), ["k", 42])
+        self.assertEqual(F(42, "k"), ["$call-cont", "k", 42])
         self.assertEqual(F(42, ["l_cont", ["x"], "k_body"]),
                          ["let", [["x", 42]], "k_body"])
 
     def test_add(self):
         exp = ["+", 1, 2]
-        self.assertEqual(F(exp, "k"), ["k", exp])
+        self.assertEqual(F(exp, "k"), ["$call-cont", "k", exp])
         self.assertEqual(F(exp, ["l_cont", ["x"], "k_body"]),
                          ["let", [["x", exp]], "k_body"])
 
     def test_let(self):
         exp = ["let", [["x", 42]], ["+", "x", 1]]
         self.assertEqual(F(exp, "k"),
-                         ["let", [["x", 42]], ["k", ["+", "x", 1]]])
+                         ["let", [["x", 42]], ["$call-cont", "k", ["+", "x", 1]]])
 
     def test_if(self):
         exp = ["if", 1, 2, 3]
-        self.assertEqual(F(exp, "k"), ["if", 1, ["k", 2], ["k", 3]])
+        self.assertEqual(F(exp, "k"),
+                         ["if", 1,
+                          ["$call-cont", "k", 2],
+                          ["$call-cont", "k", 3]])
         self.assertEqual(F(exp, ["l_cont", ["x"], "k_body"]),
                          ["letrec", [["$k0", ["l_jump", ["x"], "k_body"]]],
-                          ["if", 1, ["$k0", 2], ["$k0", 3]]])
+                          ["if", 1, ["$jmp", "$k0", 2], ["$jmp", "$k0", 3]]])
 
     def test_app_letrec_cont(self):
         exp = ["f", 1, 2]
         self.assertEqual(F(exp, "$k0"),
                          ["let", [["v0", ["f", 1, 2]]],
-                          ["jmp", "$k0", "v0"]])
+                          ["$jmp", "$k0", "v0"]])
 
     def test_app_cont(self):
         exp = ["f", 1, 2]
@@ -150,14 +158,15 @@ class CPSConversionTests(UseGensym):
                          ["letrec", [["$k0", ["l_jump", ["x"], "k_body"]]],
                           ["if", 1,
                            ["let", [["v1", ["f", 2]]],
-                            ["jmp", "$k0", "v1"]],
+                            ["$jmp", "$k0", "v1"]],
                            ["let", [["v2", ["g", 3]]],
-                            ["jmp", "$k0", "v2"]]]])
+                            ["$jmp", "$k0", "v2"]]]])
 
     def test_lambda(self):
         exp = ["lambda", ["x"], ["+", "x", 1]]
         self.assertEqual(V(exp),
-                         ["l_proc", ["x", "k0"], ["k0", ["+", "x", 1]]])
+                         ["l_proc", ["x", "k0"],
+                          ["$call-cont", "k0", ["+", "x", 1]]])
 
 
 """
