@@ -161,4 +161,5 @@ class CPSConversionTests(UseGensym):
 
 
 if __name__ == "__main__":
+    __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999
     unittest.main()
