@@ -190,6 +190,71 @@ that defines the value of the corresponding variable in the SSA program.
 """
 
 
+def G(cps) -> list:
+    match cps:
+        case ["let", [[x, value]], body]:
+            return [[x, "<-", value], *G(body)]
+        case ["$call-cont", k, exp]:
+            return [["return", exp]]
+        case ["$jmp", k, exp]:
+            return [["goto", k]]
+        case ["if", test, conseq, alt]:
+            return [["if", test, G(conseq), G(alt)]]
+        case ["letrec", [*_], body]:
+            return G(body)
+        case _:
+            raise NotImplementedError(f"not implemented: {cps}")
+
+
+def Gproc(cps):
+    match cps:
+        case ["l_proc", [*args], body]:
+            return ["proc", args, G(body)]
+        case _:
+            raise TypeError(f"not a procedure: {cps}")
+
+
+def Gjump(j, cps):
+    match cps:
+        case ["l_jump", [*args], body]:
+            raise NotImplementedError("l_jump not implemented")
+        case _:
+            raise TypeError(f"not a jump: {cps}")
+
+
+class SSAConversionTests(unittest.TestCase):
+    def test_let(self):
+        cps = ["let", [["x", 42]], ["$call-cont", "k", ["+", "x", 1]]]
+        self.assertEqual(G(cps), [
+            ["x", "<-", 42],
+            ["return", ["+", "x", 1]]
+        ])
+
+    def test_call_cont(self):
+        cps = ["$call-cont", "k", 42]
+        self.assertEqual(G(cps), [["return", 42]])
+
+    def test_if(self):
+        cps = ["if", 1, ["$call-cont", "k", 2], ["$call-cont", "k", 3]]
+        self.assertEqual(G(cps), [["if", 1, [["return", 2]], [["return", 3]]]])
+
+    def test_if_app(self):
+        cps = F(["if", 1, ["f", 2], ["g", 3]], ["l_cont", ["x"], "k_body"])
+        self.assertEqual(G(cps),
+                         [["if", 1,
+                           [["v1", "<-", ["f", 2]],
+                            ["goto", "$k0"]],
+                           [["v2", "<-", ["g", 3]],
+                            ["goto", "$k0"]]]])
+
+    def test_lambda(self):
+        cps = ["l_proc", ["x", "k0"], ["$call-cont", "k0", ["+", "x", 1]]]
+        self.assertEqual(Gproc(cps),
+                         ["proc", ["x", "k0"], [
+                             ["return", ["+", "x", 1]],
+                         ]])
+
+
 if __name__ == "__main__":
     __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999
     unittest.main()
