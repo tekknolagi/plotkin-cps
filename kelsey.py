@@ -50,7 +50,7 @@ def V(exp):
             k = gensym("k")
             return ["l_proc", [*args, k], F(body, k)]
         case _:
-            raise RuntimeError(f"not a procedure: {exp}")
+            raise TypeError(f"not a procedure: {exp}")
 
 
 def is_trivial(exp):
