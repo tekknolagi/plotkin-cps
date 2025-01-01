@@ -160,6 +160,22 @@ class CPSConversionTests(UseGensym):
                          ["l_proc", ["x", "k0"], ["k0", ["+", "x", 1]]])
 
 
+"""
+SSA grammar:
+P ::= proc(x*) { B L* }
+L ::= l: I* B
+I ::= x <- phi(E*);
+B ::= x <- E; B
+    | x <- E(E*); B
+    | goto l_i
+    | return E;
+    | return E(E*);
+    | if E then B else B
+E ::= x | E + E | ...
+where x are variables, l are labels
+"""
+
+
 if __name__ == "__main__":
     __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999
     unittest.main()
