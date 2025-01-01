@@ -55,11 +55,14 @@ def is_trivial(exp):
 def F(exp, k):
     if isinstance(exp, list) and exp[0] == "+":
         assert all(is_trivial(arg) for arg in exp[1:]), "Arguments must be trivial"
+    if isinstance(k, list):
+        assert k[0] == "l_cont"
+    else:
+        assert isinstance(k, str)
     match exp:
         case int(_) | str(_) | ["+", *_] if isinstance(k, str):
             return [k, exp]
         case int(_) | str(_) | ["+", *_]:
-            assert k[0] == "l_cont", "Expected continuation in E"
             _, [k_arg], k_body = k
             return ["let", [[k_arg, exp]], k_body]
         case ["let", [[x, value]], body]:
@@ -70,7 +73,6 @@ def F(exp, k):
         case ["if", test, conseq, alt] if isinstance(k, str):
             return ["if", test, F(conseq, k), F(alt, k)]
         case ["if", test, conseq, alt]:
-            assert k[0] == "l_cont", "Expected continuation in if"
             _, [k_arg], k_body = k
             # $ indicates that it's bound by letrec, which is a terrible way to
             # do this, but I want to keep the function looking as similar to
