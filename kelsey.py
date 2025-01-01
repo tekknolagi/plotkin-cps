@@ -48,9 +48,13 @@ def V(exp):
             raise RuntimeError(f"not a procedure: {exp}")
 
 
+def is_trivial(exp):
+    return isinstance(exp, (int, str))
+
+
 def F(exp, k):
     if isinstance(exp, list) and exp[0] == "+":
-        assert all(isinstance(arg, (int,str)) for arg in exp[1:]), "Arguments must be trivial"
+        assert all(is_trivial(arg) for arg in exp[1:]), "Arguments must be trivial"
     match exp:
         case int(_) | str(_) | ["+", *_] if isinstance(k, str):
             return [k, exp]
@@ -68,14 +72,35 @@ def F(exp, k):
         case ["if", test, conseq, alt]:
             assert k[0] == "l_cont", "Expected continuation in if"
             _, [k_arg], k_body = k
-            kvar = gensym("k")
+            # $ indicates that it's bound by letrec, which is a terrible way to
+            # do this, but I want to keep the function looking as similar to
+            # Kelsey's paper as possible (for now). This is needed for the
+            # function call case, which has two cases: 1) letrec-bound conts
+            # and 2) other conts.
+            kvar = gensym("$k")
             return ["letrec", [[kvar, ["l_jump", [k_arg], k_body]]],
                     ["if", test, F(conseq, kvar), F(alt, kvar)]]
+        case [fn, *args] if isinstance(k, str) and k[0] == "$":
+            # Letrec-bound continuation
+            v = gensym()
+            assert is_trivial(fn), "Function must be trivial"
+            assert all(is_trivial(arg) for arg in args), "Arguments must be trivial"
+            return ["let", [[v, exp]], ["jmp", k]]
+        case [fn, *args]:
+            assert is_trivial(fn), "Function must be trivial"
+            assert all(is_trivial(arg) for arg in args), "Arguments must be trivial"
+            return [fn, *args, k]
         case _:
             raise NotImplementedError(f"not implemented: {exp}")
 
 
-class CPSConversionTests(unittest.TestCase):
+class UseGensym(unittest.TestCase):
+    def setUp(self):
+        global GENSYM_COUNTER
+        GENSYM_COUNTER = iter(range(1000))
+
+
+class CPSConversionTests(UseGensym):
     def test_int(self):
         self.assertEqual(F(42, "k"), ["k", 42])
         self.assertEqual(F(42, ["l_cont", ["x"], "k_body"]),
@@ -96,8 +121,26 @@ class CPSConversionTests(unittest.TestCase):
         exp = ["if", 1, 2, 3]
         self.assertEqual(F(exp, "k"), ["if", 1, ["k", 2], ["k", 3]])
         self.assertEqual(F(exp, ["l_cont", ["x"], "k_body"]),
-                         ["letrec", [["k0", ["l_jump", ["x"], "k_body"]]],
-                          ["if", 1, ["k0", 2], ["k0", 3]]])
+                         ["letrec", [["$k0", ["l_jump", ["x"], "k_body"]]],
+                          ["if", 1, ["$k0", 2], ["$k0", 3]]])
+
+    def test_app_letrec_cont(self):
+        exp = ["f", 1, 2]
+        self.assertEqual(F(exp, "$k0"),
+                         ["let", [["v0", ["f", 1, 2]]],
+                          ["jmp", "$k0"]])
+
+    def test_app_cont(self):
+        exp = ["f", 1, 2]
+        self.assertEqual(F(exp, "k0"),
+                         ["f", 1, 2, "k0"])
+        self.assertEqual(F(exp, ["l_cont", ["x"], "k_body"]),
+                         ["f", 1, 2, ["l_cont", ["x"], "k_body"]])
+
+    def test_lambda(self):
+        exp = ["lambda", ["x"], ["+", "x", 1]]
+        self.assertEqual(V(exp),
+                         ["l_proc", ["x", "k0"], ["k0", ["+", "x", 1]]])
 
 
 if __name__ == "__main__":
