@@ -74,9 +74,8 @@ def F(exp, k):
             _, [k_arg], k_body = k
             return ["let", [[k_arg, exp]], k_body]
         case ["let", [[x, value]], body]:
-            # TODO(max): Double check l_cont is right. The paper just has a
-            # lambda, which doesn't seem right--C is only either l_cont or
-            # l_jump.
+            # The paper just has a lambda, which is shorthand or a typo. The
+            # continuation argument to F can only be a variable or l_cont.
             return F(value, ["l_cont", x, F(body, k)])
         case ["if", test, conseq, alt] if isinstance(k, str):
             return ["if", test, F(conseq, k), F(alt, k)]
