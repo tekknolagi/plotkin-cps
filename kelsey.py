@@ -10,10 +10,10 @@ def gensym(stem="v"):
 
 """
 Scheme grammar:
-M ::=   E
-      | (E E*)
-      | (if E M M)
-      | (let ((x M)) M)
+M ::= E
+    | (E E*)
+    | (if E M M)
+    | (let ((x M)) M)
 E ::= x | (+ E E) | ...
 P ::= (lambda (x*) M)
 where x are variables
@@ -33,11 +33,11 @@ nested l_proc's).
 
 """
 CPS grammar:
-M' ::=   (E E* C)
-       | (k E)
-       | (if E M' M')
-       | (let ((x E)) M')
-       | (letrec ((x P')) M')
+M' ::= (E E* C)
+     | (k E)
+     | (if E M' M')
+     | (let ((x E)) M')
+     | (letrec ((x P')) M')
 C ::= k | (l_cont (x) M')
 P' ::= (l_proc (x* k) M') | (l_jump (x*) M')
 where x, k are variables
