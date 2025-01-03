@@ -182,11 +182,14 @@ B ::= x <- E; B
 E ::= x | E + E | ...
 where x are variables, l are labels
 
-The l_jump's in the program are ignored when found by G. Each l_ump is instead
+The l_jump's in the program are ignored when found by G. Each l_jump is instead
 lifted up to become a labeled block in the SSA procedure. The arguments to the
 l_jump's, which are also ignored by G, become the arguments to the phi function
 that defines the value of the corresponding variable in the SSA program.
 """
+
+
+# TODO(max): Collect the l_jump and their arguments and lift to blocks
 
 
 def G(cps) -> list:
