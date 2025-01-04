@@ -37,6 +37,79 @@ nested l_proc's).
 """
 
 
+def alphatise_(exp, env):
+    match exp:
+        case int(_):
+            return exp
+        case str(_):
+            return env[exp]
+        case [op, *args] if op in ("+",):
+            return [op, *(alphatise_(arg, env) for arg in args)]
+        case ["if", cond, conseq, alt]:
+            return ["if", alphatise_(cond, env),
+                    alphatise_(conseq, env),
+                    alphatise_(alt, env)]
+        case ["let", [[x, value]], body]:
+            name = gensym(x)
+            return ["let", [[name, alphatise_(value, env)]],
+                    alphatise_(body, {**env, x: name})]
+        case ["lambda", [*args], body]:
+            new_args = [gensym(arg) for arg in args]
+            updates = dict(zip(args, new_args))
+            return ["lambda", [new_args], alphatise_(body, {**env, **updates})]
+        case list(_):
+            return [alphatise_(e, env) for e in exp]
+        case _:
+            raise NotImplementedError(f"not implemented: {exp}")
+
+
+def alphatise(exp):
+    return alphatise_(exp, {})
+
+
+class AlphatiseTests(UseGensym):
+    def test_int(self):
+        self.assertEqual(alphatise(5), 5)
+
+    def test_add(self):
+        self.assertEqual(alphatise_(["+", "a", "b"], {"a": "x", "b": "y"}),
+                         ["+", "x", "y"])
+
+    def test_name_not_in_env(self):
+        with self.assertRaises(KeyError):
+            alphatise_("x", {})
+
+    def test_name_in_env(self):
+        self.assertEqual(alphatise_("x", {"x": "y"}), "y")
+
+    def test_if(self):
+        exp = ["if", "a", "b", "c"]
+        self.assertEqual(alphatise_(exp, {"a": "x", "b": "y", "c": "z"}),
+                         ["if", "x", "y", "z"])
+
+    def test_let_not_in_env(self):
+        exp = ["let", [["x", 1]], "x"]
+        self.assertEqual(alphatise_(exp, {}), ["let", [["x0", 1]], "x0"])
+
+    def test_let_in_env(self):
+        exp = ["let", [["x", 1]], "x"]
+        self.assertEqual(alphatise_(exp, {"x": "a"}), ["let", [["x0", 1]], "x0"])
+
+    def test_lambda_not_in_env(self):
+        exp = ["lambda", ["x", "y"], "x"]
+        self.assertEqual(alphatise_(exp, {}), ["lambda", [["x0", "y1"]], "x0"])
+
+    def test_lambda_in_env(self):
+        exp = ["lambda", ["x", "y"], "x"]
+        self.assertEqual(alphatise_(exp, {"x": "a"}), ["lambda", [["x0", "y1"]], "x0"])
+
+    def test_app(self):
+        self.assertEqual(
+           alphatise_(["f", "a", "b"], {"f": "g", "a": "x", "b": "y"}),
+           ["g", "x", "y"],
+        )
+
+
 """
 CPS grammar:
 M' ::= (E E* C)
