@@ -43,12 +43,8 @@ def alphatise_(exp, env):
             return exp
         case str(_):
             return env[exp]
-        case [op, *args] if op in ("+",):
+        case [op, *args] if op in ("if", "+",):
             return [op, *(alphatise_(arg, env) for arg in args)]
-        case ["if", cond, conseq, alt]:
-            return ["if", alphatise_(cond, env),
-                    alphatise_(conseq, env),
-                    alphatise_(alt, env)]
         case ["let", [[x, value]], body]:
             name = gensym(x)
             return ["let", [[name, alphatise_(value, env)]],
