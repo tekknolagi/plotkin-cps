@@ -326,6 +326,9 @@ class SSAConversionTests(unittest.TestCase):
                          ]])
 
 
+# TODO(max): Convert out of SSA with parallel assignments and emit C
+
+
 if __name__ == "__main__":
     __import__("sys").modules["unittest.util"]._MAX_LENGTH = 999999999
     unittest.main()
