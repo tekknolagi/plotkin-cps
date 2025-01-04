@@ -8,6 +8,12 @@ def gensym(stem="v"):
     return f"{stem}{next(GENSYM_COUNTER)}"
 
 
+class UseGensym(unittest.TestCase):
+    def setUp(self):
+        global GENSYM_COUNTER
+        GENSYM_COUNTER = iter(range(1000))
+
+
 """
 Scheme grammar:
 M ::= E
@@ -103,12 +109,6 @@ def F(exp, k):
             return [fn, *args, k]
         case _:
             raise NotImplementedError(f"not implemented: {exp}")
-
-
-class UseGensym(unittest.TestCase):
-    def setUp(self):
-        global GENSYM_COUNTER
-        GENSYM_COUNTER = iter(range(1000))
 
 
 class CPSConversionTests(UseGensym):
