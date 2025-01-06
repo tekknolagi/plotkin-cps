@@ -271,36 +271,57 @@ that defines the value of the corresponding variable in the SSA program.
 # TODO(max): Collect the l_jump and their arguments and lift to blocks
 
 
-def G(cps) -> list:
-    match cps:
-        case ["let", [[x, value]], body]:
-            return [[x, "<-", value], *G(body)]
-        case ["$call-cont", k, exp]:
-            return [["return", exp]]
-        case ["$jmp", k, exp]:
-            return [["goto", k]]
-        case ["if", test, conseq, alt]:
-            return [["if", test, G(conseq), G(alt)]]
-        case ["letrec", [*_], body]:
-            return G(body)
-        case _:
-            raise NotImplementedError(f"not implemented: {cps}")
+class C:
+    def __init__(self):
+        self.blocks = {}
+
+    def G(self, cps) -> list:
+        match cps:
+            case ["let", [[x, value]], body]:
+                return [[x, "<-", value], *self.G(body)]
+            case ["$call-cont", k, exp]:
+                return [["return", exp]]
+            case ["$jmp", k, exp]:
+                assert isinstance(exp, str)
+                return [["goto", k]]
+            case ["if", test, conseq, alt]:
+                return [["if", test, self.G(conseq), G(alt)]]
+            case ["letrec", [*lams], body]:
+                for name, lam in lams:
+                    self.blocks[name] = self.Gjump(name, lam)
+                return self.G(body)
+            case _:
+                raise NotImplementedError(f"not implemented: {cps}")
+
+    def Gjump(self, name, lam):
+        assert lam[0] == "l_jump"
+        _, [x], body = lam
+        return [
+            # TODO(max): Fill in where the phi args are from/what variables
+            [x, "<-", "phi"],
+            *self.G(body),
+        ]
+
+
+def G(cps):
+    c = C()
+    return c.G(cps)
+
+
+def Gblocks(cps):
+    c = C()
+    entry = c.G(cps)
+    c.blocks["entry"] = entry
+    return c.blocks
 
 
 def Gproc(cps):
     match cps:
         case ["l_proc", [*args], body]:
+            # TODO(max): Gjump(...) ???
             return ["proc", args, G(body)]
         case _:
             raise TypeError(f"not a procedure: {cps}")
-
-
-def Gjump(j, cps):
-    match cps:
-        case ["l_jump", [*args], body]:
-            raise NotImplementedError("l_jump not implemented")
-        case _:
-            raise TypeError(f"not a jump: {cps}")
 
 
 class SSAConversionTests(unittest.TestCase):
@@ -320,13 +341,29 @@ class SSAConversionTests(unittest.TestCase):
         self.assertEqual(G(cps), [["if", 1, [["return", 2]], [["return", 3]]]])
 
     def test_if_app(self):
-        cps = F(["if", 1, ["f", 2], ["g", 3]], ["l_cont", ["x"], "k_body"])
+        cps = F(["if", 1, ["f", 2], ["g", 3]], ["l_cont", ["x"], ["$call-cont",
+                                                                  "$halt", "x"]])
         self.assertEqual(G(cps),
-                         [["if", 1,
-                           [["v1", "<-", ["f", 2]],
-                            ["goto", "$k0"]],
-                           [["v2", "<-", ["g", 3]],
-                            ["goto", "$k0"]]]])
+                             [["if", 1,
+                              [["v1", "<-", ["f", 2]],
+                               ["goto", "$k0"]],
+                              [["v2", "<-", ["g", 3]],
+                               ["goto", "$k0"]]]])
+        self.assertEqual(Gblocks(cps),
+                         {"$k0": [
+                             ["x", "<-", "phi"],
+                             ["return", "x"]],
+                          "entry": [
+                              ["if", 1,
+                               [
+                                   ["v1", "<-", ["f", 2]],
+                                   ["goto", "$k0"],
+                               ],
+                               [
+                                   ["v2", "<-", ["g", 3]],
+                                   ["goto", "$k0"],
+                               ]],
+                           ]})
 
     def test_lambda(self):
         cps = ["l_proc", ["x", "k0"], ["$call-cont", "k0", ["+", "x", 1]]]
