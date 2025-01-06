@@ -132,6 +132,15 @@ def is_trivial(exp):
     return isinstance(exp, (int, str))
 
 
+def jmp(k, exp):
+    match exp:
+        case str(_):
+            return ["$jmp", k, exp]
+        case _:
+            v = gensym()
+            return ["let", [[v, exp]], ["$jmp", k, v]]
+
+
 def F(exp, k):
     if isinstance(exp, list) and exp[0] == "+":
         assert all(is_trivial(arg) for arg in exp[1:]), "Arguments must be trivial"
@@ -143,7 +152,7 @@ def F(exp, k):
         case int(_) | str(_) | ["+", *_] if isinstance(k, str):
             if k[0] == "$":
                 # Letrec-bound jmp continuation
-                return ["$jmp", k, exp]
+                return jmp(k, exp)
             return ["$call-cont", k, exp]
         case int(_) | str(_) | ["+", *_]:
             _, [k_arg], k_body = k
@@ -166,12 +175,9 @@ def F(exp, k):
                     ["if", test, F(conseq, kvar), F(alt, kvar)]]
         case [fn, *args] if isinstance(k, str) and k[0] == "$":
             # Letrec-bound jmp continuation
-            v = gensym()
             assert is_trivial(fn), "Function must be trivial"
             assert all(is_trivial(arg) for arg in args), "Arguments must be trivial"
-            # TODO(max): Convert to call to F to make sure this $jmp logic is
-            # in one place?
-            return ["let", [[v, exp]], ["$jmp", k, v]]
+            return jmp(k, exp)
         case [fn, *args]:
             assert is_trivial(fn), "Function must be trivial"
             assert all(is_trivial(arg) for arg in args), "Arguments must be trivial"
@@ -205,7 +211,11 @@ class CPSConversionTests(UseGensym):
                           ["$call-cont", "k", 3]])
         self.assertEqual(F(exp, ["l_cont", ["x"], "k_body"]),
                          ["letrec", [["$k0", ["l_jump", ["x"], "k_body"]]],
-                          ["if", 1, ["$jmp", "$k0", 2], ["$jmp", "$k0", 3]]])
+                          ["if", 1,
+                           ["let", [["v1", 2]],
+                            ["$jmp", "$k0", "v1"]],
+                           ["let", [["v2", 3]],
+                            ["$jmp", "$k0", "v2"]]]])
 
     def test_app_letrec_cont(self):
         exp = ["f", 1, 2]
