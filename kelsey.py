@@ -274,6 +274,17 @@ that defines the value of the corresponding variable in the SSA program.
 class C:
     def __init__(self):
         self.blocks = {}
+        self.block = "entry"
+        self.jumps = {}
+
+    def phi(self, to):
+        phi = self.jumps.get(to)
+        if phi is None:
+            phi = self.jumps[to] = []
+        return phi
+
+    def jmp(self, to, arg):
+        self.phi(to).append((self.block, arg))
 
     def G(self, cps) -> list:
         match cps:
@@ -283,12 +294,16 @@ class C:
                 return [["return", exp]]
             case ["$jmp", k, exp]:
                 assert isinstance(exp, str)
+                self.jmp(k, exp)
                 return [["goto", k]]
             case ["if", test, conseq, alt]:
-                return [["if", test, self.G(conseq), G(alt)]]
+                return [["if", test, self.G(conseq), self.G(alt)]]
             case ["letrec", [*lams], body]:
+                prev_block = self.block
                 for name, lam in lams:
+                    self.block = name
                     self.blocks[name] = self.Gjump(name, lam)
+                self.block = prev_block
                 return self.G(body)
             case _:
                 raise NotImplementedError(f"not implemented: {cps}")
@@ -297,8 +312,7 @@ class C:
         assert lam[0] == "l_jump"
         _, [x], body = lam
         return [
-            # TODO(max): Fill in where the phi args are from/what variables
-            [x, "<-", "phi"],
+            [x, "<-", "phi", self.phi(name)],
             *self.G(body),
         ]
 
@@ -351,19 +365,17 @@ class SSAConversionTests(unittest.TestCase):
                                ["goto", "$k0"]]]])
         self.assertEqual(Gblocks(cps),
                          {"$k0": [
-                             ["x", "<-", "phi"],
+                             ["x", "<-", "phi", [("entry", "v1"), ("entry", "v2")]],
                              ["return", "x"]],
                           "entry": [
-                              ["if", 1,
-                               [
-                                   ["v1", "<-", ["f", 2]],
-                                   ["goto", "$k0"],
-                               ],
-                               [
-                                   ["v2", "<-", ["g", 3]],
-                                   ["goto", "$k0"],
-                               ]],
-                           ]})
+                              ["if", 1, [
+                                  ["v1", "<-", ["f", 2]],
+                                  ["goto", "$k0"],
+                              ], [
+                                  ["v2", "<-", ["g", 3]],
+                                  ["goto", "$k0"],
+                              ]]]}
+                         )
 
     def test_lambda(self):
         cps = ["l_proc", ["x", "k0"], ["$call-cont", "k0", ["+", "x", 1]]]
